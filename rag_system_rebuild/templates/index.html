@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG System Rebuild</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"], textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            white-space: pre-wrap;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .stats {
+            background-color: #e2e3e5;
+            border: 1px solid #d6d8db;
+            color: #383d41;
+        }
+        .context-item {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 3px;
+        }
+        .source {
+            font-weight: bold;
+            color: #007bff;
+        }
+        .similarity {
+            color: #28a745;
+            font-size: 12px;
+        }
+        .model-select-container {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f0f8ff;
+            border-radius: 8px;
+            border: 1px solid #b3d8fd;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .model-select-container label {
+            margin-bottom: 0;
+        }
+        #modelStatus {
+            margin-left: 10px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>RAG System Rebuild</h1>
+
+        <!-- Model Selection -->
+        <div class="model-select-container">
+            <label for="modelSelect">Ollama Model:</label>
+            <select id="modelSelect"></select>
+            <span id="modelStatus"></span>
+        </div>
+        <div class="model-select-container">
+            <label for="embeddingSelect">Embedding Model:</label>
+            <select id="embeddingSelect"></select>
+            <span id="embeddingStatus"></span>
+        </div>
+        
+        <!-- Persist Directory Selection -->
+        <div class="model-select-container">
+            <label for="persistDirInput">Persist Directory:</label>
+            <input type="text" id="persistDirInput" style="width: 300px;" placeholder="Enter persist directory...">
+            <button onclick="switchPersistDir()">Switch Directory</button>
+            <span id="persistDirStatus"></span>
+        </div>
+        
+        <!-- System Stats -->
+        <div class="section">
+            <h2>System Statistics</h2>
+            <div id="stats" class="result stats">
+                Loading...
+            </div>
+        </div>
+
+        <!-- Document Upload -->
+        <div class="section">
+            <h2>Upload Documents</h2>
+            <form id="uploadForm">
+                <div class="form-group">
+                    <label for="files">Upload Files:</label>
+                    <input type="file" id="files" name="files" multiple accept=".txt,.md,.csv,.json,.xml,.html,.htm,.pdf">
+                    <small style="color: #666;">Supported formats: PDF, TXT, MD, CSV, JSON, XML, HTML</small>
+                </div>
+                <div class="form-group">
+                    <label for="textContent">Or Paste Text:</label>
+                    <textarea id="textContent" name="text_content" placeholder="Paste your text here..."></textarea>
+                </div>
+                <button type="submit">Upload Documents</button>
+            </form>
+            <div id="uploadResult" class="result" style="display: none;"></div>
+        </div>
+
+        <!-- Query Section -->
+        <div class="section">
+            <h2>Ask Questions</h2>
+            <form id="queryForm">
+                <div class="form-group">
+                    <label for="question">Question:</label>
+                    <input type="text" id="question" name="question" placeholder="Enter your question..." required>
+                </div>
+                <div class="form-group">
+                    <label for="k">Number of context chunks:</label>
+                    <select id="k" name="k">
+                        <option value="1">1</option>
+                        <option value="3" selected>3</option>
+                        <option value="5">5</option>
+                        <option value="10">10</option>
+                    </select>
+                </div>
+                <button type="submit">Ask Question</button>
+            </form>
+            <div id="queryResult" class="result" style="display: none;"></div>
+        </div>
+
+        <!-- Batch Query -->
+        <div class="section">
+            <h2>Batch Query</h2>
+            <form id="batchQueryForm">
+                <div class="form-group">
+                    <label for="questions">Questions (one per line):</label>
+                    <textarea id="questions" name="questions" placeholder="Enter multiple questions, one per line..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="batchK">Number of context chunks:</label>
+                    <select id="batchK" name="k">
+                        <option value="1">1</option>
+                        <option value="3" selected>3</option>
+                        <option value="5">5</option>
+                        <option value="10">10</option>
+                    </select>
+                </div>
+                <button type="submit">Process Batch Query</button>
+            </form>
+            <div id="batchQueryResult" class="result" style="display: none;"></div>
+        </div>
+
+        <!-- System Management -->
+        <div class="section">
+            <h2>System Management</h2>
+            <button onclick="listDocuments()">List Documents</button>
+            <button onclick="clearDocuments()">Clear All Documents</button>
+            <button onclick="healthCheck()">Health Check</button>
+            <button onclick="removeDuplicates()">Remove Fuzzy Duplicates</button>
+            <div id="managementResult" class="result" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        // Load stats and models on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadStats();
+            loadModels();
+            loadEmbeddingModels();
+            loadPersistDir();
+        });
+
+        async function loadModels() {
+            const select = document.getElementById('modelSelect');
+            const status = document.getElementById('modelStatus');
+            select.innerHTML = '<option>Loading...</option>';
+            status.textContent = '';
+            try {
+                const res = await fetch('/ollama/models');
+                const data = await res.json();
+                const models = data.models || [];
+                select.innerHTML = '';
+                models.forEach(model => {
+                    const opt = document.createElement('option');
+                    opt.value = model;
+                    opt.textContent = model;
+                    select.appendChild(opt);
+                });
+                // Get current model from stats
+                const statsRes = await fetch('/stats');
+                const statsData = await statsRes.json();
+                let currentModel = statsData.current_model || statsData.model || '';
+                if (currentModel) {
+                    select.value = currentModel;
+                    status.textContent = `Current: ${currentModel}`;
+                } else {
+                    status.textContent = 'Current model unknown';
+                }
+            } catch (e) {
+                select.innerHTML = '<option>Error loading models</option>';
+                status.textContent = 'Error';
+            }
+        }
+
+        document.getElementById('modelSelect').addEventListener('change', async function() {
+            const model = this.value;
+            const status = document.getElementById('modelStatus');
+            status.textContent = 'Switching...';
+            try {
+                const res = await fetch('/ollama/switch-model', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model_name: model })
+                });
+                const data = await res.json();
+                if (data.success !== false) {
+                    status.textContent = `Switched to: ${model}`;
+                    loadStats();
+                } else {
+                    status.textContent = data.message || 'Failed to switch model';
+                }
+            } catch (e) {
+                status.textContent = 'Error switching model';
+            }
+        });
+
+        async function loadEmbeddingModels() {
+            const select = document.getElementById('embeddingSelect');
+            const status = document.getElementById('embeddingStatus');
+            select.innerHTML = '<option>Loading...</option>';
+            status.textContent = '';
+            try {
+                const res = await fetch('/embedding/models');
+                const data = await res.json();
+                const models = data.models || [];
+                select.innerHTML = '';
+                models.forEach(model => {
+                    const opt = document.createElement('option');
+                    opt.value = model;
+                    opt.textContent = model;
+                    select.appendChild(opt);
+                });
+                let currentModel = data.current_model || '';
+                if (currentModel) {
+                    select.value = currentModel;
+                    status.textContent = `Current: ${currentModel}`;
+                } else {
+                    status.textContent = 'Current model unknown';
+                }
+            } catch (e) {
+                select.innerHTML = '<option>Error loading models</option>';
+                status.textContent = 'Error';
+            }
+        }
+
+        document.getElementById('embeddingSelect').addEventListener('change', async function() {
+            const model = this.value;
+            const status = document.getElementById('embeddingStatus');
+            status.textContent = 'Switching...';
+            try {
+                const res = await fetch('/embedding/switch-model', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model_name: model })
+                });
+                const data = await res.json();
+                if (data.success !== false) {
+                    status.textContent = `Switched to: ${model}`;
+                    loadStats();
+                } else {
+                    status.textContent = data.message || 'Failed to switch model';
+                }
+            } catch (e) {
+                status.textContent = 'Error switching model';
+            }
+        });
+
+        async function loadPersistDir() {
+            const status = document.getElementById('persistDirStatus');
+            const input = document.getElementById('persistDirInput');
+            try {
+                const res = await fetch('/vector/persist-directory');
+                const data = await res.json();
+                if (data.persist_directory) {
+                    status.textContent = `Current: ${data.persist_directory}`;
+                    input.value = data.persist_directory;
+                } else {
+                    status.textContent = 'Unknown';
+                }
+            } catch (e) {
+                status.textContent = 'Error loading persist directory';
+            }
+        }
+
+        async function switchPersistDir() {
+            const input = document.getElementById('persistDirInput');
+            const status = document.getElementById('persistDirStatus');
+            const dir = input.value.trim();
+            if (!dir) {
+                status.textContent = 'Please enter a directory.';
+                return;
+            }
+            status.textContent = 'Switching...';
+            try {
+                const res = await fetch('/vector/switch-persist-directory', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ persist_directory: dir })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    status.textContent = `Switched to: ${dir}`;
+                    loadStats();
+                } else {
+                    status.textContent = data.message || 'Failed to switch directory';
+                }
+            } catch (e) {
+                status.textContent = 'Error switching directory';
+            }
+        }
+
+        async function loadStats() {
+            try {
+                const response = await fetch('/stats');
+                const data = await response.json();
+                document.getElementById('stats').textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                document.getElementById('stats').textContent = 'Error loading stats: ' + error.message;
+            }
+        }
+
+        // Upload form handler
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const formData = new FormData();
+            
+            const files = document.getElementById('files').files;
+            for (let file of files) {
+                formData.append('files', file);
+            }
+            
+            const textContent = document.getElementById('textContent').value;
+            if (textContent.trim()) {
+                formData.append('text_content', textContent);
+            }
+            
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                displayResult('uploadResult', result);
+                if (result.success) {
+                    loadStats();
+                }
+            } catch (error) {
+                displayResult('uploadResult', { success: false, error: error.message });
+            }
+        });
+
+        // Query form handler
+        document.getElementById('queryForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const question = document.getElementById('question').value;
+            const k = parseInt(document.getElementById('k').value);
+            
+            try {
+                const response = await fetch('/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ question, k })
+                });
+                const result = await response.json();
+                
+                // Check if this is a special response indicating no context found
+                if (result.success && result.answer === 'NO_CONTEXT_FOUND' && result.needs_user_input) {
+                    // Show the fallback question and ask for user input
+                    displayFallbackQuestion('queryResult', result, question, k);
+                } else {
+                    displayQueryResult('queryResult', result);
+                }
+            } catch (error) {
+                displayResult('queryResult', { success: false, error: error.message });
+            }
+        });
+
+        // Batch query form handler
+        document.getElementById('batchQueryForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const questionsText = document.getElementById('questions').value;
+            const questions = questionsText.split('\n').filter(q => q.trim());
+            const k = parseInt(document.getElementById('batchK').value);
+            
+            try {
+                const response = await fetch('/batch-query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ questions, k })
+                });
+                const result = await response.json();
+                displayBatchQueryResult('batchQueryResult', result);
+            } catch (error) {
+                displayResult('batchQueryResult', { success: false, error: error.message });
+            }
+        });
+
+        function displayResult(elementId, result) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = 'result ' + (result.success ? 'success' : 'error');
+            element.textContent = JSON.stringify(result, null, 2);
+        }
+
+        function displayQueryResult(elementId, result) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = 'result ' + (result.success ? 'success' : 'error');
+            
+            if (result.success) {
+                let html = `<strong>Question:</strong> ${result.question}\n\n`;
+                html += `<strong>Answer:</strong>\n${result.answer}\n\n`;
+                
+                if (result.context && result.context.length > 0) {
+                    html += '<strong>Context:</strong>\n';
+                    result.context.forEach((ctx, index) => {
+                        html += `<div class="context-item">`;
+                        html += `<div class="source">Source ${index + 1}: ${ctx.source}</div>`;
+                        html += `<div class="similarity">Similarity: ${ctx.similarity_score.toFixed(3)}</div>`;
+                        html += `<div>${ctx.text}</div>`;
+                        html += '</div>';
+                    });
+                } else if (result.answer.toLowerCase().includes('would you like me to provide a general answer')) {
+                    // This is a fallback question, don't show the "no context" message
+                } else {
+                    html += '<strong>Context:</strong>\n';
+                    html += '<div class="context-item" style="background-color: #fff3cd; border-color: #ffeaa7;">';
+                    html += '<div class="source" style="color: #856404;">⚠️ No specific context found</div>';
+                    html += '<div style="color: #856404;">This answer was generated using the model\'s general knowledge without specific document context.</div>';
+                    html += '</div>';
+                }
+                
+                element.innerHTML = html;
+            } else {
+                element.textContent = JSON.stringify(result, null, 2);
+            }
+        }
+
+        function displayFallbackQuestion(elementId, result, originalQuestion, k) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = 'result success';
+            
+            let html = `<strong>Question:</strong> ${originalQuestion}\n\n`;
+            html += '<div style="margin: 20px 0; padding: 15px; background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px; color: #856404;">';
+            html += '<strong>⚠️ No specific context found</strong><br>';
+            html += 'I don\'t have enough specific information in my knowledge base to answer your question.';
+            html += '</div>';
+            html += '<div style="margin: 20px 0; padding: 15px; background-color: #e3f2fd; border: 1px solid #2196f3; border-radius: 5px;">';
+            html += '<strong>Would you like me to provide a general answer based on my training data?</strong><br>';
+            html += '<small style="color: #666;">Note: This may not be as accurate or up-to-date as information from your specific documents.</small><br><br>';
+            html += '<button onclick="handleFallbackResponse(\'yes\', \'' + originalQuestion.replace(/'/g, "\\'") + '\', ' + k + ')" style="margin: 5px; padding: 8px 16px; background-color: #4caf50; color: white; border: none; border-radius: 3px; cursor: pointer;">Yes, provide general answer</button>';
+            html += '<button onclick="handleFallbackResponse(\'no\', \'' + originalQuestion.replace(/'/g, "\\'") + '\', ' + k + ')" style="margin: 5px; padding: 8px 16px; background-color: #f44336; color: white; border: none; border-radius: 3px; cursor: pointer;">No, I\'ll rephrase</button>';
+            html += '</div>';
+            
+            element.innerHTML = html;
+        }
+
+        async function handleFallbackResponse(response, question, k) {
+            const resultElement = document.getElementById('queryResult');
+            resultElement.style.display = 'block';
+            resultElement.className = 'result';
+            resultElement.innerHTML = '<div style="text-align: center; padding: 20px;">Processing...</div>';
+            
+            try {
+                if (response === 'yes') {
+                    // Call the backend to generate a general answer
+                    const apiResponse = await fetch('/query-without-context', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ question, k })
+                    });
+                    const result = await apiResponse.json();
+                    displayQueryResult('queryResult', result);
+                } else {
+                    // User chose not to get a general answer
+                    resultElement.innerHTML = '<div style="padding: 20px; background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px; color: #856404;">';
+                    resultElement.innerHTML += '<strong>Understood.</strong> Please rephrase your question or add more relevant documents to the knowledge base for a more accurate answer.';
+                    resultElement.innerHTML += '</div>';
+                }
+            } catch (error) {
+                resultElement.innerHTML = '<div style="padding: 20px; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 5px; color: #721c24;">';
+                resultElement.innerHTML += '<strong>Error:</strong> ' + error.message;
+                resultElement.innerHTML += '</div>';
+            }
+        }
+
+        function displayBatchQueryResult(elementId, results) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = 'result success';
+            
+            let html = '<strong>Batch Query Results:</strong>\n\n';
+            results.forEach((result, index) => {
+                html += `--- Result ${index + 1} ---\n`;
+                html += `Question: ${result.question}\n`;
+                html += `Success: ${result.success}\n`;
+                if (result.success) {
+                    html += `Answer: ${result.answer}\n`;
+                } else {
+                    html += `Error: ${result.message}\n`;
+                }
+                html += '\n';
+            });
+            
+            element.textContent = html;
+        }
+
+        async function listDocuments() {
+            try {
+                const response = await fetch('/documents');
+                const result = await response.json();
+                displayResult('managementResult', result);
+            } catch (error) {
+                displayResult('managementResult', { success: false, error: error.message });
+            }
+        }
+
+        async function clearDocuments() {
+            if (confirm('Are you sure you want to clear all documents?')) {
+                try {
+                    const response = await fetch('/documents', { method: 'DELETE' });
+                    const result = await response.json();
+                    displayResult('managementResult', result);
+                    if (result.success) {
+                        loadStats();
+                    }
+                } catch (error) {
+                    displayResult('managementResult', { success: false, error: error.message });
+                }
+            }
+        }
+
+        async function healthCheck() {
+            try {
+                const response = await fetch('/health');
+                const result = await response.json();
+                displayResult('managementResult', result);
+            } catch (error) {
+                displayResult('managementResult', { success: false, error: error.message });
+            }
+        }
+
+        async function removeDuplicates() {
+            if (confirm('Remove all fuzzy duplicate documents?')) {
+                try {
+                    const response = await fetch('/documents/remove-duplicates', { method: 'POST' });
+                    const result = await response.json();
+                    displayResult('managementResult', result);
+                    if (result.success) {
+                        loadStats();
+                    }
+                } catch (error) {
+                    displayResult('managementResult', { success: false, error: error.message });
+                }
+            }
+        }
+    </script>
+</body>
+</html> 
