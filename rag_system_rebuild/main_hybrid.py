@@ -7,7 +7,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 import uvicorn
 
-from vector_store import AsyncVectorStore
+from vector_store import VectorStore
 from bm25_search import AsyncBM25Search
 from hybrid_search_system import HybridSearchSystem, HybridRAGSystem
 from ollama_generator import OllamaGenerator
@@ -16,7 +16,7 @@ from ollama_generator import OllamaGenerator
 app = FastAPI(title="Hybrid RAG System", version="3.0.0")
 
 # Initialize components
-vector_store = AsyncVectorStore("hybrid_rag")
+vector_store = VectorStore("hybrid_rag")
 bm25_store = AsyncBM25Search("hybrid_rag_bm25.db")
 
 # Create hybrid search system

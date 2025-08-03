@@ -1,0 +1,4 @@
+1. Deduplication of files in documents 
+2. Anonimizer for PII 
+3. Prefer short or long documents -- need check? 
+4. Chunk Overlap: - for vectore store 

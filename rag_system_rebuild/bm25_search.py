@@ -8,6 +8,7 @@ from pathlib import Path
 import asyncio
 from dataclasses import dataclass, asdict
 import logging
+from datetime import datetime
 
 @dataclass
 class SearchResult:
@@ -133,6 +134,33 @@ class BM25Search:
         tokens = [token for token in tokens if len(token) > 2]
         return tokens
     
+    def _generate_summary(self, content: str, max_length: int = 150) -> str:
+        """Generate a summary of the content."""
+        if not content:
+            return ""
+        
+        # Simple summary generation: take first few sentences
+        sentences = re.split(r'[.!?]+', content.strip())
+        summary_parts = []
+        current_length = 0
+        
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+            
+            if current_length + len(sentence) <= max_length:
+                summary_parts.append(sentence)
+                current_length += len(sentence)
+            else:
+                break
+        
+        summary = '. '.join(summary_parts)
+        if summary and not summary.endswith('.'):
+            summary += '.'
+        
+        return summary
+    
     def _calculate_idf(self, term: str) -> float:
         """Calculate Inverse Document Frequency for a term."""
         if term not in self.doc_freq or self.doc_freq[term] == 0:
@@ -171,6 +199,15 @@ class BM25Search:
         """Add a document to the BM25 index."""
         if metadata is None:
             metadata = {}
+        
+        # Add timestamp
+        timestamp = datetime.now().isoformat()
+        metadata['timestamp'] = timestamp
+        metadata['created_at'] = timestamp
+        
+        # Generate summary if not provided
+        if 'summary' not in metadata:
+            metadata['summary'] = self._generate_summary(content)
         
         # Tokenize content
         terms = self._tokenize(content)

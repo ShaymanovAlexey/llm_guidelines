@@ -59,6 +59,34 @@ class VectorStore:
         except Exception as e:
             return {"success": False, "message": str(e)}
     
+    def _generate_summary(self, content: str, max_length: int = 150) -> str:
+        """Generate a summary of the content."""
+        if not content:
+            return ""
+        
+        # Simple summary generation: take first few sentences
+        import re
+        sentences = re.split(r'[.!?]+', content.strip())
+        summary_parts = []
+        current_length = 0
+        
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+            
+            if current_length + len(sentence) <= max_length:
+                summary_parts.append(sentence)
+                current_length += len(sentence)
+            else:
+                break
+        
+        summary = '. '.join(summary_parts)
+        if summary and not summary.endswith('.'):
+            summary += '.'
+        
+        return summary
+    
     async def add_documents(self, documents: List[Dict[str, Any]], chunk_size: int = 1000, chunk_overlap: int = 200, topic: str = None) -> None:
         """Add documents to the vector store, splitting into chunks and skipping fuzzy duplicates. Optionally add a topic to metadata."""
         # Split documents into chunks first, with topic
@@ -226,6 +254,16 @@ class VectorStore:
         for doc in documents:
             text = doc.get('text', '')
             metadata = doc.get('metadata', {}).copy() if doc.get('metadata') else {}
+            
+            # Add timestamp if not present
+            if 'timestamp' not in metadata:
+                metadata['timestamp'] = time.strftime('%Y-%m-%d %H:%M:%S')
+                metadata['created_at'] = metadata['timestamp']
+            
+            # Generate summary if not present
+            if 'summary' not in metadata:
+                metadata['summary'] = self._generate_summary(text)
+            
             # Always set topic: prefer argument, then doc metadata, else 'Unknown'
             meta_topic = topic or metadata.get('topic') or 'UnknownSource'
             metadata['topic'] = meta_topic

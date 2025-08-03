@@ -40,7 +40,7 @@ class HybridSearchSystem:
         Initialize hybrid search system.
         
         Args:
-            vector_store: AsyncVectorStore instance for vector search
+            vector_store: VectorStore instance for vector search
             bm25_store: AsyncBM25Search instance for BM25 search
             vector_weight: Weight for vector search scores (0.0 to 1.0)
             bm25_weight: Weight for BM25 search scores (0.0 to 1.0)
