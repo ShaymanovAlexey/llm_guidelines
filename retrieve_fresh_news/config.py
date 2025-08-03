@@ -27,7 +27,7 @@ SUMMARY_CONFIG = {
 
 # Vector Store Configuration
 VECTOR_STORE_CONFIG = {
-    'persist_directory': '..rag_system_rebuild/rag_storage/vector_embeddings',
+    'persist_directory': '../rag_system_rebuild/rag_storage/vector_embeddings',
     'collection_name': 'news_with_summaries_visible',  # Visible collection
     'chunk_size': 1000,
     'chunk_overlap': 200
