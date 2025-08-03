@@ -1,0 +1,123 @@
+{
+  "test_time": "2025-07-20T02:10:07.792667",
+  "tests": [
+    {
+      "test_type": "initialization",
+      "model": "llama3.2:latest",
+      "health_status": {
+        "status": "healthy",
+        "model": "llama3.2:latest",
+        "available_models": [
+          "mxbai-embed-large:latest",
+          "qwen3:8b",
+          "llama3.2:3b-instruct-fp16",
+          "ALIENTELLIGENCE/genaiimagecsprompt:latest",
+          "llama3.2-vision:latest",
+          "ALIENTELLIGENCE/genaiimagecspromptv:latest",
+          "deepseek-r1:32b",
+          "phi4:14b",
+          "qwen2.5-coder:14b",
+          "deepseek-r1:14b",
+          "llama3.2:latest"
+        ],
+        "base_url": "http://localhost:11434"
+      },
+      "response_time": 0.0035943984985351562,
+      "status": "success"
+    },
+    {
+      "query": "What is Bitcoin and how does it work?",
+      "response": "Based on the context information from Source 1, I can provide a general overview of Bitcoin.\n\nBitcoin is a decentralized digital currency that uses blockchain technology as its underlying system. The blockchain is a public ledger that records all transactions made with Bitcoins, allowing for secure and transparent verification of every transaction.\n\nHere's how it works:\n\n1. Mining: New Bitcoins are created through a process called mining, where powerful computers solve complex mathematical problems to validate transactions on the blockchain.\n2. Transactions: When someone wants to send Bitcoins to another person, they create a transaction and broadcast it to the network.\n3. Verification: Miners verify the transaction using complex algorithms and add it to the blockchain.\n4. Blockchain update: The updated blockchain is distributed across the entire network, allowing all nodes to agree on the state of the blockchain.\n\nThis decentralized system ensures that Bitcoins are secure, transparent, and resistant to tampering or censorship.\n\nNote: This answer relies on general knowledge about Bitcoin and may not provide a comprehensive technical explanation, as Source 1 does not contain specific details about its inner workings.",
+      "response_time": 2.1175384521484375,
+      "status": "success",
+      "response_length": 1235
+    },
+    {
+      "query": "Explain cryptocurrency trading strategies",
+      "response": "Based on the general knowledge about cryptocurrency, I can provide some common cryptocurrency trading strategies. However, please note that these strategies may not be specific or tailored to individual circumstances.\n\nSome popular cryptocurrency trading strategies include:\n\n1. **Day Trading**: Buying and selling cryptocurrencies within a single day, aiming to take advantage of short-term price fluctuations.\n2. **Swing Trading**: Holding positions for a shorter period than day trading, typically ranging from a few days to weeks, to capture medium-term trends.\n3. **Position Trading**: Long-term holding strategy, where investors aim to ride out market trends and profit from the long-term growth of cryptocurrencies.\n4. **Range Trading**: Buying and selling within a specific price range, hoping to benefit from the volatility between the upper and lower bounds of that range.\n5. **Scalping**: Making multiple small trades in a short period, aiming to profit from the small price movements between consecutive transactions.\n\nPlease note that these strategies may involve risk, and it's essential to conduct thorough research and consider individual financial situations before engaging in cryptocurrency trading.\n\nIf you're looking for more specific strategies or information on a particular trading approach, I'd be happy to help you find resources or provide further guidance.",
+      "response_time": 2.2917394638061523,
+      "status": "success",
+      "response_length": 1384
+    },
+    {
+      "query": "How do blockchain transactions work?",
+      "response": "Based on the general knowledge provided in Source 1, I can explain how blockchain transactions work.\n\nBlockchain transactions involve a decentralized network of computers (nodes) that record and verify transactions across multiple computers on the network. Here's a simplified overview:\n\n1. **Transaction creation**: A user initiates a transaction, such as sending cryptocurrency to another user.\n2. **Verification**: The transaction is broadcast to the network, where nodes verify its validity using complex algorithms and cryptography.\n3. **Block creation**: A group of verified transactions is collected into a \"block\" by a node on the network, which contains a unique code called a \"hash.\"\n4. **Blockchain update**: Each node on the network updates their copy of the blockchain by adding the new block to the existing chain, creating a permanent and unalterable record.\n5. **Consensus mechanism**: The nodes on the network agree on the state of the blockchain through a consensus mechanism, such as proof-of-work or proof-of-stake.\n\nOnce the transaction is confirmed and added to the blockchain, it cannot be altered or deleted, ensuring the integrity and security of the decentralized network (Source 1).\n\nPlease note that this explanation provides a general overview, and for more detailed information on blockchain transactions, I recommend consulting additional resources.",
+      "response_time": 2.4109902381896973,
+      "status": "success",
+      "response_length": 1380
+    },
+    {
+      "query": "What is the relationship between Bitcoin and blockchain technology?",
+      "context_docs": 2,
+      "context_length": 570,
+      "response": "Based on the context information provided, it appears that the relationship between Bitcoin and blockchain technology is as follows: Bitcoin uses blockchain technology.\n\nAccording to Source 1, Bitcoin operates on blockchain technology, stating that \"Bitcoin transactions are verified by network nodes through cryptography and recorded in a public distributed ledger called a blockchain.\" Additionally, Source 2 provides further context on blockchain technology, describing it as \"a distributed ledger technology\" that records transactions across multiple computers.\n\nThere is no direct statement about the relationship between Bitcoin and blockchain being anything other than an association.",
+      "response_time": 1.1304545402526855,
+      "status": "success",
+      "response_length": 691,
+      "avg_similarity_score": 0.6135858046954036
+    },
+    {
+      "query": "How does cryptocurrency trading differ from traditional stock trading?",
+      "context_docs": 2,
+      "context_length": 327,
+      "response": "Based on the provided context, it appears that there is not enough information to provide a comprehensive comparison between cryptocurrency trading and traditional stock trading. While Source 1 provides some general information about cryptocurrency trading strategies and factors affecting prices, it does not discuss traditional stock trading.\n\nSource 2 only provides the current price of Bitcoin, which is unrelated to the question of how cryptocurrency trading differs from traditional stock trading.\n\nTherefore, I must say that the context information provided above does not contain enough details to answer this question accurately. If you have additional context or information about traditional stock trading, I would be happy to try and help further.",
+      "response_time": 1.2010681629180908,
+      "status": "success",
+      "response_length": 759,
+      "avg_similarity_score": 0.5107072076675924
+    },
+    {
+      "query": "Explain the concept of mining in cryptocurrency",
+      "context_docs": 2,
+      "context_length": 588,
+      "response": "Based on the provided context information, I can provide some general insights about cryptocurrency trading and Bitcoin, but unfortunately, there is no specific mention of mining in Source 1 or Source 2.\n\nHowever, it's known that blockchain technology, which is mentioned in Source 2, is a fundamental concept in cryptocurrencies. In the context of Bitcoin and other cryptocurrencies, mining typically refers to the process of validating transactions on the blockchain network.\n\nUnfortunately, I don't have enough information from the provided context to explain the exact concept of mining in cryptocurrency. Mining involves using computational power to solve complex mathematical problems, which helps to secure the network and verify transactions. If you're looking for more detailed information about mining, I recommend searching for additional resources or explaining it in a different context.\n\nIf you have any further questions or would like me to clarify anything else, please feel free to ask!",
+      "response_time": 1.7257184982299805,
+      "status": "success",
+      "response_length": 1003,
+      "avg_similarity_score": 0.506975236244227
+    },
+    {
+      "test_type": "crypto_factual",
+      "prompt": "What is the current price of Bitcoin? Answer based on general knowledge.",
+      "response": "I'm not sure about the current price of Bitcoin based on the provided context information. The context only mentions a source for a direct query with a similarity of 1.00, but it does not provide any specific data or updates on the current price of Bitcoin. To answer this question accurately, I would need more up-to-date information.\n\nIf you're looking for the current price of Bitcoin, I recommend checking a reliable financial news source or cryptocurrency website for the most recent information.",
+      "response_time": 0.9129140377044678,
+      "status": "success",
+      "response_length": 501,
+      "quality_score": 1.0,
+      "keyword_matches": 3,
+      "total_keywords": 3
+    },
+    {
+      "test_type": "trading_strategy",
+      "prompt": "Explain the HODL strategy in cryptocurrency trading in exactly 3 sentences.",
+      "response": "Based on Source 1, I can explain the HODL strategy in exactly 3 sentences:\n\nThe HODL (Hold On for Dear Life) strategy in cryptocurrency trading involves holding onto a particular cryptocurrency despite market fluctuations and volatility. This approach requires patience and a long-term perspective, as the investor hopes to benefit from the potential long-term growth of the cryptocurrency. By not selling or buying during periods of price swings, the investor aims to ride out market corrections and potentially capture larger gains when prices recover.\n\nPlease note that the context information only provides information about the HODL strategy in general terms, without specifying any particular details or nuances.",
+      "response_time": 1.2225158214569092,
+      "status": "success",
+      "response_length": 718,
+      "quality_score": 1.0,
+      "keyword_matches": 4,
+      "total_keywords": 4
+    },
+    {
+      "test_type": "blockchain_explanation",
+      "prompt": "Explain what a smart contract is in blockchain technology.",
+      "response": "Based on the context information provided, I can explain that a smart contract is a self-executing contract with the terms of the agreement written directly into lines of code. It is stored and replicated on a blockchain, which ensures the integrity and transparency of the contract.\n\nAccording to source 1 (direct_query), the concept of smart contracts was first proposed by Nick Szabo in 1994, but it gained popularity with the rise of blockchain technology. Smart contracts allow for the automation of specific actions when certain conditions are met, reducing the need for intermediaries and increasing efficiency.\n\nIn summary, a smart contract is a self-executing contract that is stored on a blockchain and automates the execution of terms, ensuring integrity and transparency.",
+      "response_time": 1.3638379573822021,
+      "status": "success",
+      "response_length": 783,
+      "quality_score": 0.75,
+      "keyword_matches": 3,
+      "total_keywords": 4
+    }
+  ],
+  "summary": {
+    "total_tests": 10,
+    "successful_tests": 10,
+    "success_rate": 1.0,
+    "avg_response_time": 1.4380371570587158,
+    "min_response_time": 0.0035943984985351562,
+    "max_response_time": 2.4109902381896973,
+    "avg_response_length": 939.3333333333334,
+    "avg_quality_score": 0.9166666666666666
+  }
+}

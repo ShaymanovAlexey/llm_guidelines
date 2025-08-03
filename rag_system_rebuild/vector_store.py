@@ -36,11 +36,15 @@ class VectorStore:
             settings=Settings(anonymized_telemetry=False)
         )
         
-        # Get or create collection
-        self.collection = self.client.get_or_create_collection(
-            name=collection_name,
-            metadata={"hnsw:space": "cosine"}
-        )
+        # Try to get existing collection first, create if it doesn't exist
+        try:
+            self.collection = self.client.get_collection(name=collection_name)
+        except:
+            # Collection doesn't exist, create it
+            self.collection = self.client.create_collection(
+                name=collection_name,
+                metadata={"hnsw:space": "cosine"}
+            )
     
     @classmethod
     def get_available_embedding_models(cls) -> List[str]:

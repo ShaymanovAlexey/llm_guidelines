@@ -9,6 +9,7 @@ from urllib.parse import urljoin
 import requests
 import time
 import asyncio
+import datetime
 BRAVE_PATH = "/usr/bin/brave-browser"
 CHROMEDRIVER_PATH = "/usr/local/bin/chromedriver"
 USER_DATA_DIR = "/home/alex/.config/BraveSoftware/Brave-Browser"
@@ -18,7 +19,34 @@ NEWS_URL = "https://www.ainvest.com/news/articles-latest/"
 import os
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../rag_system_rebuild')))
-from vector_store import VectorStore
+from fuzzy_vector_store import FuzzyVectorStore
+from summary_generator import generate_summary
+from config import SUMMARY_CONFIG, VECTOR_STORE_CONFIG, NEWS_SOURCES, get_summary_kwargs, BM25_CONFIG
+from bm25_database import BM25Database
+import chromadb
+from chromadb.config import Settings
+
+def ensure_collection_exists():
+    """Ensure the collection exists and is visible in ChromaDB."""
+    try:
+        client = chromadb.PersistentClient(
+            path=VECTOR_STORE_CONFIG['persist_directory'],
+            settings=Settings(anonymized_telemetry=False)
+        )
+        
+        # Try to get the collection - if it doesn't exist, create it
+        try:
+            collection = client.get_collection(VECTOR_STORE_CONFIG['collection_name'])
+            print(f"✅ Collection '{VECTOR_STORE_CONFIG['collection_name']}' already exists")
+        except:
+            # Collection doesn't exist, create it
+            collection = client.create_collection(VECTOR_STORE_CONFIG['collection_name'])
+            print(f"✅ Created collection '{VECTOR_STORE_CONFIG['collection_name']}'")
+        
+        return True
+    except Exception as e:
+        print(f"❌ Error ensuring collection exists: {e}")
+        return False
 
 def extract_article_content(url):
     try:
@@ -73,17 +101,120 @@ def extract_latest_news_selenium():
 
 if __name__ == "__main__":
     async def main():
-        store = VectorStore(persist_directory = "./rag_system_rebuild/chroma_db")
+        # Ensure collection exists and is visible
+        if not ensure_collection_exists():
+            print("Failed to ensure collection exists. Exiting.")
+            return
+        
+        # Initialize both storage systems
+        print("Initializing storage systems...")
+        store = FuzzyVectorStore(
+            collection_name=VECTOR_STORE_CONFIG['collection_name'],
+            persist_directory=VECTOR_STORE_CONFIG['persist_directory'],
+            duplicate_threshold=0.9  # Fuzzy duplicate detection threshold
+        )
+        
+        bm25_db = BM25Database(
+            database_path=BM25_CONFIG['database_path'],
+            collection_name=BM25_CONFIG['collection_name']
+        )
+        
+        # Get configuration
+        summary_generator_type = SUMMARY_CONFIG['generator_type']
+        max_length = SUMMARY_CONFIG['max_length']
+        summary_kwargs = get_summary_kwargs()
+        
         news = extract_latest_news_selenium()
+        
+        print(f"Using summary generator: {summary_generator_type}")
+        print(f"Summary length: {max_length} characters")
+        print(f"Vector store path: {VECTOR_STORE_CONFIG['persist_directory']}")
+        print(f"BM25 database path: {BM25_CONFIG['database_path']}")
+        print(f"Fuzzy duplicate threshold: {store.duplicate_threshold}")
+        
+        # Track statistics
+        vector_docs_added = 0
+        bm25_docs_added = 0
+        
         for i, article in enumerate(news, 1):
-            docs = [
-                {'text': article['content']}
-            ]
-            await store.add_documents(docs, chunk_size=1000, chunk_overlap=200, topic=article['title'])
-            all_docs = await store.list_documents()
-            # print(f"\n--- Article {i} ---")
-            # print(f"Title: {article['title']}")
-            # print(f"URL: {article['url']}")
-            # print(f"Content: {article['content'][:800]}...")  # Show first 800 chars
-            # print("-" * 50)
+            if not article['content']:
+                continue
+                
+            # Generate metadata with timestamp and summary
+            timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+            # Generate summary using the configured generator
+            summary = await generate_summary(
+                article['content'], 
+                max_length=max_length, 
+                generator_type=summary_generator_type, 
+                **summary_kwargs
+            )
+            
+            # Prepare document for both storage systems
+            doc = {
+                'text': article['content'],
+                'metadata': {
+                    'title': article['title'],
+                    'url': article['url'],
+                    'source': 'ainvest.com',
+                    'timestamp': timestamp,
+                    'created_at': timestamp,
+                    'summary': summary,
+                    'topic': NEWS_SOURCES['ainvest']['topic'],
+                    'content_length': len(article['content']),
+                    'extraction_method': 'selenium',
+                    'summary_generator': summary_generator_type
+                }
+            }
+            
+            # Add to vector store (with fuzzy duplicate detection)
+            try:
+                await store.add_documents([doc])
+                vector_docs_added += 1
+                print(f"✅ Added to vector store (fuzzy duplicate detection enabled)")
+            except Exception as e:
+                print(f"❌ Error adding to vector store: {e}")
+            
+            # Add to BM25 database
+            try:
+                if bm25_db.add_document(doc):
+                    bm25_docs_added += 1
+                    print(f"✅ Added to BM25 database")
+                else:
+                    print(f"❌ Failed to add to BM25 database")
+            except Exception as e:
+                print(f"❌ Error adding to BM25 database: {e}")
+            
+            print(f"\n--- Article {i} ---")
+            print(f"Title: {article['title']}")
+            print(f"URL: {article['url']}")
+            print(f"Summary: {summary}")
+            print(f"Content length: {len(article['content'])} characters")
+            print(f"Summary generator: {summary_generator_type}")
+            print("-" * 50)
+        
+        # Print final statistics
+        print("\n" + "=" * 60)
+        print("📊 FINAL STATISTICS")
+        print("=" * 60)
+        
+        # Vector store stats
+        vector_stats = await store.get_collection_stats()
+        print(f"🔍 Fuzzy Vector Store:")
+        print(f"   • Total documents: {vector_stats['total_documents']}")
+        print(f"   • Documents added this run: {vector_docs_added}")
+        print(f"   • Duplicate threshold: {store.duplicate_threshold}")
+        
+        # BM25 database stats
+        bm25_stats = bm25_db.get_stats()
+        print(f"📚 BM25 Database:")
+        print(f"   • Total documents: {bm25_stats.get('total_documents', 0)}")
+        print(f"   • Documents added this run: {bm25_docs_added}")
+        print(f"   • Documents by source: {bm25_stats.get('documents_by_source', {})}")
+        
+        print(f"\n✅ SUCCESS: Documents saved to both storage systems!")
+        print(f"   • Fuzzy vector embeddings: {VECTOR_STORE_CONFIG['persist_directory']}")
+        print(f"   • BM25 database: {BM25_CONFIG['database_path']}")
+        
     asyncio.run(main()) 
