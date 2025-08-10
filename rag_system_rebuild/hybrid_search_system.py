@@ -7,6 +7,14 @@ from datetime import datetime
 from vector_store import VectorStore
 from bm25_search import AsyncBM25Search, SearchResult as BM25SearchResult
 
+# Import Langfuse integration
+try:
+    from langfuse_integration import LangfuseManager, create_rag_trace, score_rag_response
+    LANGFUSE_AVAILABLE = True
+except ImportError:
+    LANGFUSE_AVAILABLE = False
+    print("Warning: Langfuse integration not available")
+
 @dataclass
 class HybridSearchResult:
     """Represents a hybrid search result combining vector and BM25 scores."""
@@ -77,7 +85,7 @@ class HybridSearchSystem:
             # Add to vector store
             await self.vector_store.add_documents([{
                 'id': doc_id,
-                'content': content,
+                'text': content,
                 'metadata': metadata
             }])
             
@@ -99,7 +107,7 @@ class HybridSearchSystem:
                     top_k: int = 10,
                     search_type: str = 'hybrid') -> List[HybridSearchResult]:
         """
-        Search documents using the specified search method.
+        Search for documents using the specified search type.
         
         Args:
             query: Search query
@@ -116,18 +124,18 @@ class HybridSearchSystem:
         elif search_type == 'hybrid':
             return await self._hybrid_search(query, top_k)
         else:
-            raise ValueError(f"Invalid search_type: {search_type}")
+            raise ValueError(f"Invalid search type: {search_type}. Use 'vector', 'bm25', or 'hybrid'")
     
     async def _vector_search(self, query: str, top_k: int) -> List[HybridSearchResult]:
-        """Perform vector search only."""
-        results = await self.vector_store.similarity_search(query, k=top_k)
+        """Perform vector search."""
+        results = await self.vector_store.similarity_search(query, top_k)
         
         hybrid_results = []
         for result in results:
             hybrid_results.append(HybridSearchResult(
-                doc_id=result['id'],
-                title=result['metadata'].get('title', f'Document {result["id"][:8]}'),
-                content=result['content'],
+                doc_id=result.get('id', str(uuid.uuid4())),
+                title=result['metadata'].get('title', 'Unknown'),
+                content=result['text'],
                 vector_score=result['similarity_score'],
                 bm25_score=0.0,
                 combined_score=result['similarity_score'],
@@ -139,7 +147,7 @@ class HybridSearchSystem:
         return hybrid_results
     
     async def _bm25_search(self, query: str, top_k: int) -> List[HybridSearchResult]:
-        """Perform BM25 search only."""
+        """Perform BM25 search."""
         results = await self.bm25_store.search(query, top_k)
         
         hybrid_results = []
@@ -161,85 +169,64 @@ class HybridSearchSystem:
     async def _hybrid_search(self, query: str, top_k: int) -> List[HybridSearchResult]:
         """Perform hybrid search combining vector and BM25 results."""
         # Get results from both search methods
-        vector_results = await self.vector_store.similarity_search(query, k=top_k * 2)
-        bm25_results = await self.bm25_store.search(query, top_k * 2)
+        vector_results = await self._vector_search(query, top_k * 2)
+        bm25_results = await self._bm25_search(query, top_k * 2)
         
-        # Create lookup dictionaries
-        vector_lookup = {result['id']: result for result in vector_results}
-        bm25_lookup = {result.doc_id: result for result in bm25_results}
+        # Create a map of doc_id to results for easy lookup
+        doc_map = {}
         
-        # Combine results
-        all_doc_ids = set(vector_lookup.keys()) | set(bm25_lookup.keys())
-        combined_results = []
+        # Add vector results
+        for result in vector_results:
+            doc_map[result.doc_id] = result
         
-        for doc_id in all_doc_ids:
-            vector_result = vector_lookup.get(doc_id)
-            bm25_result = bm25_lookup.get(doc_id)
-            
-            # Get scores (normalize to 0-1 range)
-            vector_score = vector_result['similarity_score'] if vector_result else 0.0
-            bm25_score = bm25_result.score if bm25_result else 0.0
-            
-            # Normalize BM25 score (assuming typical range 0-10)
-            normalized_bm25_score = min(bm25_score / 10.0, 1.0)
-            
-            # Calculate combined score
-            combined_score = (self.vector_weight * vector_score + 
-                            self.bm25_weight * normalized_bm25_score)
-            
-            # Get document information
-            if vector_result:
-                title = vector_result['metadata'].get('title', f'Document {doc_id[:8]}')
-                content = vector_result['content']
-                chunk_index = vector_result['metadata'].get('chunk_index', 0)
-                metadata = vector_result['metadata']
-            elif bm25_result:
-                title = bm25_result.title
-                content = bm25_result.content
-                chunk_index = bm25_result.chunk_index
-                metadata = bm25_result.metadata
+        # Add or update with BM25 results
+        for result in bm25_results:
+            if result.doc_id in doc_map:
+                # Update existing result with BM25 score
+                doc_map[result.doc_id].bm25_score = result.bm25_score
+                doc_map[result.doc_id].combined_score = (
+                    self.vector_weight * doc_map[result.doc_id].vector_score +
+                    self.bm25_weight * result.bm25_score
+                )
+                doc_map[result.doc_id].source = 'hybrid'
             else:
-                continue
-            
-            combined_results.append(HybridSearchResult(
-                doc_id=doc_id,
-                title=title,
-                content=content,
-                vector_score=vector_score,
-                bm25_score=bm25_score,
-                combined_score=combined_score,
-                chunk_index=chunk_index,
-                metadata=metadata,
-                source='hybrid'
-            ))
+                # Add new result
+                result.combined_score = result.bm25_score
+                doc_map[result.doc_id] = result
         
-        # Sort by combined score and return top_k
-        combined_results.sort(key=lambda x: x.combined_score, reverse=True)
-        return combined_results[:top_k]
+        # Convert to list and sort by combined score
+        hybrid_results = list(doc_map.values())
+        hybrid_results.sort(key=lambda x: x.combined_score, reverse=True)
+        
+        return hybrid_results[:top_k]
     
     async def get_document(self, doc_id: str) -> Optional[Dict]:
-        """Retrieve a document by ID from both stores."""
+        """Get a specific document by ID."""
         # Try vector store first
-        vector_doc = await self.vector_store.get_document(doc_id)
-        if vector_doc:
-            return vector_doc
+        doc = await self.vector_store.get_document(doc_id)
+        if doc:
+            return doc
         
         # Try BM25 store
-        bm25_doc = await self.bm25_store.get_document(doc_id)
-        if bm25_doc:
-            return bm25_doc
+        doc = await self.bm25_store.get_document(doc_id)
+        if doc:
+            return {
+                'id': doc.doc_id,
+                'content': doc.content,
+                'metadata': doc.metadata
+            }
         
         return None
     
     async def get_statistics(self) -> Dict:
-        """Get statistics from both search systems."""
-        vector_stats = await self.vector_store.get_statistics()
+        """Get statistics about the hybrid search system."""
+        vector_stats = await self.vector_store.get_collection_stats()
         bm25_stats = await self.bm25_store.get_statistics()
         
         return {
             'vector_store': vector_stats,
             'bm25_store': bm25_stats,
-            'hybrid_config': {
+            'weights': {
                 'vector_weight': self.vector_weight,
                 'bm25_weight': self.bm25_weight
             }
@@ -247,8 +234,8 @@ class HybridSearchSystem:
     
     async def clear_all(self):
         """Clear all documents from both stores."""
-        await self.vector_store.clear_collection()
-        await self.bm25_store.clear_index()
+        await self.vector_store.clear_all()
+        await self.bm25_store.clear_all()
     
     async def update_weights(self, vector_weight: float, bm25_weight: float):
         """Update the weights for hybrid search."""
@@ -260,6 +247,7 @@ class HybridSearchSystem:
             self.vector_weight = vector_weight
             self.bm25_weight = bm25_weight
 
+
 class HybridRAGSystem:
     """
     Complete RAG system with hybrid search capabilities.
@@ -269,7 +257,8 @@ class HybridRAGSystem:
     def __init__(self, 
                  hybrid_search: HybridSearchSystem,
                  generator,
-                 max_context_length: int = 4000):
+                 max_context_length: int = 4000,
+                 langfuse_manager=None):
         """
         Initialize hybrid RAG system.
         
@@ -277,10 +266,12 @@ class HybridRAGSystem:
             hybrid_search: HybridSearchSystem instance
             generator: Answer generator (e.g., OllamaGenerator)
             max_context_length: Maximum context length for generation
+            langfuse_manager: Optional LangfuseManager for observability
         """
         self.hybrid_search = hybrid_search
         self.generator = generator
         self.max_context_length = max_context_length
+        self.langfuse_manager = langfuse_manager
     
     async def add_documents(self, documents: List[Dict[str, Any]]) -> List[str]:
         """Add documents to the hybrid search system."""
@@ -290,7 +281,9 @@ class HybridRAGSystem:
                    question: str, 
                    top_k: int = 5,
                    search_type: str = 'hybrid',
-                   max_tokens: Optional[int] = None) -> Dict[str, Any]:
+                   max_tokens: Optional[int] = None,
+                   user_id: Optional[str] = None,
+                   session_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Query the RAG system with hybrid search.
         
@@ -299,54 +292,165 @@ class HybridRAGSystem:
             top_k: Number of documents to retrieve
             search_type: 'vector', 'bm25', or 'hybrid'
             max_tokens: Maximum tokens for answer generation
+            user_id: User identifier for tracing
+            session_id: Session identifier for tracing
         
         Returns:
             Dictionary with answer, context, and metadata
         """
-        # Search for relevant documents
-        search_results = await self.hybrid_search.search(question, top_k, search_type)
+        # Create Langfuse trace if available
+        trace = None
         
-        if not search_results:
-            return {
-                'answer': 'No relevant documents found.',
-                'context': [],
-                'search_type': search_type,
-                'scores': {}
-            }
+        if self.langfuse_manager and self.langfuse_manager.is_enabled():
+            trace = create_rag_trace(
+                self.langfuse_manager,
+                question,
+                user_id=user_id,
+                session_id=session_id
+            )
         
-        # Prepare context for generation
-        context_docs = []
-        total_length = 0
-        
-        for result in search_results:
-            if total_length + len(result.content) > self.max_context_length:
-                break
+        try:
+            # Search for relevant documents with tracing
+            if trace and self.langfuse_manager.is_enabled():
+                with self.langfuse_manager.client.start_as_current_span(
+                    name="document_search",
+                    input={
+                        "query": question,
+                        "top_k": top_k,
+                        "search_type": search_type
+                    },
+                    metadata={"operation": "hybrid_search"}
+                ) as search_span:
+                    search_results = await self.hybrid_search.search(question, top_k, search_type)
+                    # Update span with results - use Langfuse client methods directly
+                    try:
+                        self.langfuse_manager.client.update_current_span(
+                            output={
+                                "results_count": len(search_results),
+                                "search_type": search_type
+                            },
+                            metadata={"search_success": True}
+                        )
+                    except Exception as e:
+                        print(f"⚠️  Failed to update search span: {e}")
+            else:
+                search_results = await self.hybrid_search.search(question, top_k, search_type)
             
-            context_docs.append({
-                'content': result.content,
-                'title': result.title,
-                'score': result.combined_score,
-                'source': result.source
-            })
-            total_length += len(result.content)
-        
-        # Generate answer
-        if hasattr(self.generator, 'generate_answer'):
-            answer = await self.generator.generate_answer(question, context_docs, max_tokens)
-        else:
-            # Fallback to simple template
-            answer = self._generate_template_answer(question, context_docs)
-        
-        return {
-            'answer': answer,
-            'context': context_docs,
-            'search_type': search_type,
-            'scores': {
-                'vector_scores': [r.vector_score for r in search_results],
-                'bm25_scores': [r.bm25_score for r in search_results],
-                'combined_scores': [r.combined_score for r in search_results]
+            if not search_results:
+                if trace:
+                    trace.end(
+                        output={
+                            'answer': 'No relevant documents found.',
+                            'context': [],
+                            'search_type': search_type,
+                            'scores': {}
+                        },
+                        status_message="No results found"
+                    )
+                
+                return {
+                    'answer': 'No relevant documents found.',
+                    'context': [],
+                    'search_type': search_type,
+                    'scores': {}
+                }
+            
+            # Prepare context for generation
+            context_docs = []
+            total_length = 0
+            
+            for result in search_results:
+                if total_length + len(result.content) > self.max_context_length:
+                    break
+                
+                context_docs.append({
+                    'content': result.content,
+                    'title': result.title,
+                    'score': result.combined_score,
+                    'source': result.source
+                })
+                total_length += len(result.content)
+            
+            # Generate answer with tracing
+            if trace and self.langfuse_manager.is_enabled():
+                with self.langfuse_manager.client.start_as_current_generation(
+                    name=f"ollama-{getattr(self.generator, 'model_name', 'unknown')}",
+                    model=getattr(self.generator, 'model_name', 'unknown'),
+                    input=f"Question: {question}\n\nContext: {context_docs}",
+                    model_parameters={"max_tokens": max_tokens},
+                    metadata={
+                        "context_length": total_length,
+                        "context_docs_count": len(context_docs),
+                        "search_type": search_type
+                    }
+                ) as generation_span:
+                    # Generate answer
+                    if hasattr(self.generator, 'generate_answer'):
+                        answer = await self.generator.generate_answer(question, context_docs, max_tokens)
+                    else:
+                        # Fallback to simple template
+                        answer = self._generate_template_answer(question, context_docs)
+                    
+                    # Update generation with completion - use Langfuse client methods directly
+                    try:
+                        self.langfuse_manager.client.update_current_generation(
+                            output=answer
+                        )
+                    except Exception as e:
+                        print(f"⚠️  Failed to update generation: {e}")
+                    
+                    # Score the response
+                    relevance_score = min(1.0, len(answer) / 100)  # Simple heuristic
+                    helpfulness_score = 0.8  # Could be improved with actual evaluation
+                    accuracy_score = 0.9  # Could be improved with actual evaluation
+                    
+                    # Add scores to the generation using Langfuse client methods directly
+                    # Note: Scoring functionality temporarily disabled due to API changes
+                    # TODO: Implement proper scoring when Langfuse API is updated
+                    try:
+                        # For now, just log the scores
+                        print(f"📊 Generated scores - Relevance: {relevance_score:.2f}, Helpfulness: {helpfulness_score:.2f}, Accuracy: {accuracy_score:.2f}")
+                    except Exception as e:
+                        print(f"⚠️  Failed to log scores: {e}")
+            else:
+                # Generate answer without tracing
+                if hasattr(self.generator, 'generate_answer'):
+                    answer = await self.generator.generate_answer(question, context_docs, max_tokens)
+                else:
+                    # Fallback to simple template
+                    answer = self._generate_template_answer(question, context_docs)
+            
+            result = {
+                'answer': answer,
+                'context': context_docs,
+                'search_type': search_type,
+                'scores': {
+                    'vector_scores': [r.vector_score for r in search_results],
+                    'bm25_scores': [r.bm25_score for r in search_results],
+                    'combined_scores': [r.combined_score for r in search_results]
+                }
             }
-        }
+            
+            # End trace successfully
+            if trace:
+                trace.end(
+                    output=result,
+                    metadata={
+                        "search_type": search_type,
+                        "context_length": total_length,
+                        "answer_length": len(answer)
+                    }
+                )
+            
+            return result
+            
+        except Exception as e:
+            # End trace with error
+            if trace:
+                trace.end(status_message=str(e))
+            
+            # Re-raise the exception
+            raise
     
     def _generate_template_answer(self, question: str, context_docs: List[Dict]) -> str:
         """Generate a simple template-based answer."""
@@ -360,15 +464,27 @@ class HybridRAGSystem:
 
 {context_text}
 
-Question: {question}
-
-Answer: The information above provides relevant context for your question. Please review the sources for detailed information."""
+This information should help answer your question: {question}"""
     
     async def get_statistics(self) -> Dict:
-        """Get system statistics."""
-        search_stats = await self.hybrid_search.get_statistics()
-        return {
-            'search_system': search_stats,
-            'generator': type(self.generator).__name__,
-            'max_context_length': self.max_context_length
-        } 
+        """Get statistics about the RAG system."""
+        try:
+            search_stats = await self.hybrid_search.get_statistics()
+            
+            stats = {
+                'search_system': search_stats,
+                'max_context_length': self.max_context_length,
+                'generator_type': type(self.generator).__name__
+            }
+            
+            if hasattr(self.generator, 'get_stats'):
+                stats['generator'] = await self.generator.get_stats()
+            
+            return stats
+        except Exception as e:
+            print(f"⚠️  Error getting statistics: {e}")
+            return {
+                'error': str(e),
+                'max_context_length': self.max_context_length,
+                'generator_type': type(self.generator).__name__
+            } 

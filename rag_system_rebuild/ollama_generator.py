@@ -8,7 +8,7 @@ from langchain.schema import HumanMessage, SystemMessage
 class OllamaGenerator:
     """Ollama-based answer generator for the RAG system."""
     
-    def __init__(self, model_name: str = "llama2", base_url: str = "http://localhost:11434"):
+    def __init__(self, model_name: str = "llama3.2:latest", base_url: str = "http://localhost:11434"):
         self.model_name = model_name
         self.base_url = base_url
         self.ollama = OllamaLLM(

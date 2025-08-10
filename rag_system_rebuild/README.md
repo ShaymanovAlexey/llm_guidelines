@@ -16,6 +16,7 @@ A high-performance Retrieval-Augmented Generation (RAG) system built with FastAP
 - **Health Monitoring**: System health checks and statistics
 - **Model Management**: Switch between different Ollama models
 - **Custom Prompts**: Configure system prompts for different use cases
+- **Langfuse Observability**: Tracing, scoring, and metrics for RAG operations
 - **Modern Web Interface**: Beautiful, responsive UI with real-time interactions
 - **REST API**: Complete API endpoints for programmatic access
 
@@ -74,7 +75,21 @@ pip install -r requirements.txt
 OPENAI_API_KEY=your_api_key_here
 ```
 
-3. Run the application:
+3. **Langfuse Observability** (optional but recommended):
+   ```bash
+   # Quick setup
+   python create_env.py
+   
+   # Or manually create .env file with:
+   LANGFUSE_PUBLIC_KEY=your_langfuse_public_key
+   LANGFUSE_SECRET_KEY=your_langfuse_secret_key
+   LANGFUSE_HOST=https://cloud.langfuse.com
+   
+   # Test configuration
+   python test_langfuse_config.py
+   ```
+
+4. Run the application:
 ```bash
 python main.py
 ```

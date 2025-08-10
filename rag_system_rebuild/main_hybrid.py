@@ -11,9 +11,17 @@ from vector_store import VectorStore
 from bm25_search import AsyncBM25Search
 from hybrid_search_system import HybridSearchSystem, HybridRAGSystem
 from ollama_generator import OllamaGenerator
+from config import get_config
+from langfuse_integration import LangfuseManager
+
+# Load configuration
+config = get_config()
 
 # Initialize FastAPI app
 app = FastAPI(title="Hybrid RAG System", version="3.0.0")
+
+# Initialize Langfuse manager
+langfuse_manager = LangfuseManager(config.langfuse)
 
 # Initialize components
 vector_store = VectorStore("hybrid_rag")
@@ -29,17 +37,18 @@ hybrid_search = HybridSearchSystem(
 
 # Initialize generator
 try:
-    generator = OllamaGenerator()
+    generator = OllamaGenerator(model_name="llama3.2:latest")
     print("Ollama generator initialized successfully")
 except Exception as e:
     print(f"Ollama not available, using template generator: {e}")
     generator = None
 
-# Create hybrid RAG system
+# Create hybrid RAG system with Langfuse integration
 rag_system = HybridRAGSystem(
     hybrid_search=hybrid_search,
     generator=generator,
-    max_context_length=4000
+    max_context_length=4000,
+    langfuse_manager=langfuse_manager
 )
 
 # Templates
@@ -239,7 +248,7 @@ async def health_check():
     """Health check endpoint."""
     try:
         # Check vector store
-        vector_stats = await vector_store.get_statistics()
+        vector_stats = await vector_store.get_collection_stats()
         
         # Check BM25 store
         bm25_stats = await bm25_store.get_statistics()

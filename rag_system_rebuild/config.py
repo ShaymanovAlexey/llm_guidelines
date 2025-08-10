@@ -2,9 +2,18 @@
 Configuration file for RAG System Rebuild.
 """
 
+import os
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, Type, List
 from pathlib import Path
+
+# Load environment variables from .env file if it exists
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # dotenv not available, continue without it
+    pass
 
 
 @dataclass
@@ -84,6 +93,21 @@ class HealthCheckConfig:
 
 
 @dataclass
+class LangfuseConfig:
+    """Configuration for Langfuse observability."""
+    enabled: bool = True
+    public_key: str = field(default_factory=lambda: os.getenv("LANGFUSE_PUBLIC_KEY", ""))
+    secret_key: str = field(default_factory=lambda: os.getenv("LANGFUSE_SECRET_KEY", ""))
+    host: str = field(default_factory=lambda: os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"))
+    project_name: str = "rag-system-rebuild"
+    enable_tracing: bool = True
+    enable_scoring: bool = True
+    enable_metrics: bool = True
+    trace_user_id: str = "default-user"
+    trace_session_id: str = "default-session"
+
+
+@dataclass
 class RAGSystemConfig:
     """Main RAG system configuration."""
     # Core components
@@ -97,8 +121,9 @@ class RAGSystemConfig:
     web_interface: WebInterfaceConfig = field(default_factory=WebInterfaceConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     health_check: HealthCheckConfig = field(default_factory=HealthCheckConfig)
+    langfuse: LangfuseConfig = field(default_factory=LangfuseConfig)
     
-    # System behavior
+    # System features
     enable_fallback: bool = True
     enable_metrics: bool = True
     enable_caching: bool = True
@@ -149,6 +174,15 @@ class RAGSystemConfig:
             'vector_weight': self.search.vector_weight
         }
     
+    def get_langfuse_kwargs(self) -> Dict[str, Any]:
+        """Get keyword arguments for Langfuse initialization."""
+        return {
+            'public_key': self.langfuse.public_key,
+            'secret_key': self.langfuse.secret_key,
+            'host': self.langfuse.host,
+            'project_name': self.langfuse.project_name
+        }
+    
     def validate(self) -> List[str]:
         """Validate configuration and return list of errors."""
         errors = []
@@ -183,6 +217,13 @@ class RAGSystemConfig:
         if not self.ollama.base_url.startswith(('http://', 'https://')):
             errors.append("Ollama base_url must be a valid HTTP/HTTPS URL")
         
+        # Validate Langfuse configuration
+        if self.langfuse.enabled:
+            if not self.langfuse.public_key or not self.langfuse.secret_key:
+                errors.append("Langfuse is enabled but credentials are missing")
+            if not self.langfuse.host.startswith(('http://', 'https://')):
+                errors.append("Langfuse host must be a valid HTTP/HTTPS URL")
+        
         return errors
     
     def print_config(self):
@@ -200,55 +241,49 @@ class RAGSystemConfig:
         print(f"Vector Weight: {self.search.vector_weight}")
         print(f"Web Interface: {self.web_interface.host}:{self.web_interface.port}")
         print(f"Log Level: {self.logging.level}")
+        print(f"Langfuse Enabled: {self.langfuse.enabled}")
+        if self.langfuse.enabled:
+            print(f"Langfuse Host: {self.langfuse.host}")
+            print(f"Langfuse Project: {self.langfuse.project_name}")
+        print("=" * 50)
 
 
-# Create default configuration instance
-config = RAGSystemConfig()
-
-# Environment-specific configurations
 def get_development_config() -> RAGSystemConfig:
     """Get development configuration."""
-    dev_config = RAGSystemConfig()
-    dev_config.logging.level = "DEBUG"
-    dev_config.web_interface.debug = True
-    dev_config.web_interface.reload = True
-    dev_config.enable_metrics = True
-    return dev_config
+    config = RAGSystemConfig()
+    config.logging.level = "DEBUG"
+    config.web_interface.debug = True
+    config.web_interface.reload = True
+    return config
 
 
 def get_production_config() -> RAGSystemConfig:
     """Get production configuration."""
-    prod_config = RAGSystemConfig()
-    prod_config.logging.level = "WARNING"
-    prod_config.web_interface.debug = False
-    prod_config.web_interface.reload = False
-    prod_config.enable_metrics = False
-    prod_config.processing.max_workers = 8
-    return prod_config
+    config = RAGSystemConfig()
+    config.logging.level = "WARNING"
+    config.web_interface.debug = False
+    config.web_interface.reload = False
+    config.processing.max_workers = 8
+    config.enable_metrics = True
+    return config
 
 
 def get_test_config() -> RAGSystemConfig:
     """Get test configuration."""
-    test_config = RAGSystemConfig()
-    test_config.vector_store.persist_directory = "test_storage/vector_embeddings"
-    test_config.bm25.database_path = "test_storage/bm25_database/test.db"
-    test_config.logging.level = "ERROR"
-    test_config.web_interface.port = 8001
-    test_config.enable_metrics = False
-    test_config.enable_caching = False
-    return test_config
+    config = RAGSystemConfig()
+    config.vector_store.persist_directory = "rag_storage/test_vector_embeddings"
+    config.bm25.database_path = "rag_storage/test_bm25_database/test_bm25_documents.db"
+    config.logging.level = "DEBUG"
+    config.web_interface.debug = True
+    config.langfuse.enabled = False  # Disable Langfuse for tests
+    return config
 
 
-# Configuration factory
 def get_config(environment: str = "development") -> RAGSystemConfig:
-    """Get configuration for specified environment."""
-    configs = {
-        "development": get_development_config,
-        "production": get_production_config,
-        "test": get_test_config
-    }
-    
-    if environment not in configs:
-        raise ValueError(f"Unknown environment: {environment}. Available: {list(configs.keys())}")
-    
-    return configs[environment]() 
+    """Get configuration based on environment."""
+    if environment == "production":
+        return get_production_config()
+    elif environment == "test":
+        return get_test_config()
+    else:
+        return get_development_config() 
